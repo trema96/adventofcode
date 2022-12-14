@@ -22,5 +22,5 @@ tasks.withType<KotlinCompile> {
 }
 
 application {
-    mainClass.set("year2022.day9.MainKt")
+    mainClass.set("InteractiveKt")
 }

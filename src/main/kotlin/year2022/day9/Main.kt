@@ -77,8 +77,8 @@ fun interactive() {
     val rowsSize = 50
     val colsSize = 200
     var curr = LongRope(List(10) { Point(0, 0) })
-    var offsetX = - colsSize / 2
-    var offsetY = - rowsSize / 2
+    var offsetX = -colsSize / 2
+    var offsetY = -rowsSize / 2
     val history = LinkedList<LongRope>()
     while (true) {
         print("\u001b[H\u001b[2J")
