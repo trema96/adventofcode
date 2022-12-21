@@ -34,12 +34,16 @@ data class Blueprint(
     val id: Int,
     val robots: List<RobotType>
 ) {
-    val maxCostByType = robots
+    private val maxCostByType = robots
         .flatMap { it.cost.toList() }
         .groupBy { it.first }
         .mapValues { (_, v) -> v.maxOf { it.second } }
+    private val oreBot = robots.first { it.production == Material.ORE }
+    private val clayBot = robots.first { it.production == Material.CLAY }
+    private val obsidianBot = robots.first { it.production == Material.OBSIDIAN }
+    private val geodeBot = robots.first { it.production == Material.GEODE }
 
-    fun simulateToMinute(maxMinute: Int): Sequence<Simulation> {
+    fun allSimulationsToMinute(maxMinute: Int): Sequence<Simulation> {
         fun extendRecursively(currSimulation: Simulation): Sequence<Simulation> =
             if (currSimulation.minute == maxMinute) {
                 sequenceOf(currSimulation)
@@ -65,6 +69,54 @@ data class Blueprint(
                 }
             }
         return extendRecursively(Simulation.startingSimulation())
+    }
+
+    fun productionScore(maxMinute: Int): Int {
+        fun Simulation.productionScoreInner(
+            maxMinute: Int,
+            maxClayProduction: Int,
+            maxBranching: Int?
+        ): Int = if (this.minute == maxMinute) {
+            this.materials[Material.GEODE] ?: 0
+        } else if ((maxBranching == null || maxBranching > 0)
+            && !geodeBot.producibleBy(this)
+            && (this.production[Material.CLAY] ?: 0) < maxClayProduction
+            && (this.materials[Material.CLAY] ?: 0) >= obsidianBot.cost.getValue(Material.CLAY)
+            && clayBot.producibleBy(this)
+        ) {
+            val nextMaxBranching =
+                maxBranching?.let { it - 1 } ?: 5
+            val scoreWithClay =
+                this.nextMinute(clayBot).productionScoreInner(maxMinute, maxClayProduction, nextMaxBranching)
+            val nextForObsidian =
+                if (obsidianBot.producibleBy(this)) this.nextMinute(obsidianBot) else this.nextMinute(null)
+            val scoreWithObsidian = nextForObsidian.productionScoreInner(maxMinute, maxClayProduction, nextMaxBranching)
+            if (scoreWithClay > scoreWithObsidian)
+                this.nextMinute(clayBot).productionScoreInner(maxMinute, maxClayProduction, maxBranching)
+            else if (obsidianBot.producibleBy(this))
+                this.nextMinute(obsidianBot).productionScoreInner(maxMinute, maxClayProduction, maxBranching)
+            else
+                this.nextMinute(null).productionScoreInner(maxMinute, maxClayProduction, maxBranching)
+        } else {
+            val next = if ((this.materials[Material.OBSIDIAN] ?: 0) >= geodeBot.cost.getValue(Material.OBSIDIAN)) {
+                if (geodeBot.producibleBy(this)) this.nextMinute(geodeBot) else this.nextMinute(null)
+            } else if ((this.materials[Material.CLAY] ?: 0) >= obsidianBot.cost.getValue(Material.CLAY)) {
+                if (obsidianBot.producibleBy(this)) this.nextMinute(obsidianBot) else this.nextMinute(null)
+            } else if (this.production.getValue(Material.ORE) < clayBot.cost.getValue(Material.ORE)) {
+                if (oreBot.producibleBy(this)) this.nextMinute(oreBot) else this.nextMinute(null)
+            } else if (clayBot.producibleBy(this) && (this.production[Material.CLAY] ?: 0) < maxClayProduction) {
+                this.nextMinute(clayBot)
+            } else {
+                this.nextMinute(null)
+            }
+            next.productionScoreInner(maxMinute, maxClayProduction, maxBranching)
+        }
+        val baseMaxClay = obsidianBot.cost.getValue(Material.CLAY)
+        return maxOf(
+            Simulation.startingSimulation().productionScoreInner(maxMinute, baseMaxClay, null),
+            Simulation.startingSimulation().productionScoreInner(maxMinute, baseMaxClay / 2, null),
+            Simulation.startingSimulation().productionScoreInner(maxMinute, baseMaxClay / 2 + 1, null)
+        )
     }
 }
 
@@ -96,6 +148,9 @@ class Simulation(
     override fun toString(): String {
         return "Simulation(minute=$minute, production=$production, materials=$materials)"
     }
+
+    fun producesMaterialsFor(robotType: RobotType) =
+        robotType.cost.keys.all { (production[it] ?: 0) > 0 }
 }
 
 fun main() {
@@ -109,7 +164,8 @@ fun main() {
     }
     println(
         blueprints.sumOf {
-            it.simulateToMinute(24).maxOf { s -> s.materials[Material.GEODE] ?: 0 } * it.id
+            it.allSimulationsToMinute(24).maxOf { s -> s.materials[Material.GEODE] ?: 0 } * it.id
         }
     )
+    println(blueprints.take(3).fold(1) { acc, blueprint -> blueprint.productionScore(32) * acc })
 }
