@@ -90,6 +90,12 @@ fun main() {
     (1 until Int.MAX_VALUE).first { steps ->
         follow(firstInfo.first, firstInfo.second, steps).also { loopPieces.add(it) } == follow(lastInfo.first, lastInfo.second, steps).also { loopPieces.add(it) }
     }.also { println(it + 1) }
+    /*
+     * Idea:
+     * 1. find the corners of tiles that are external to the loop: you can go from one corner to another if there is
+     * no pipe touching the edge the two corners form.
+     * 2. All tiles that are not part of the loop and are not touching an external corner are internal to the loop.
+     */
     val nextToVisit: Queue<Coordinate> = LinkedList()
     val externalGridCorners = mutableSetOf<Coordinate>()
     fun Coordinate.gridCornerInBound() =
